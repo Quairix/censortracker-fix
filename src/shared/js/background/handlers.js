@@ -250,8 +250,14 @@ export const handleTabCreate = async (tab) => {
 export const handleProxyError = async ({ error }) => {
   const usingCustomProxy = await ProxyManager.usingCustomProxy()
 
+  console.warn('[ProxyError] Event received', {
+    error,
+    usingCustomProxy,
+  })
+
   // Custom proxy is used, so we don't need to handle this error
   if (usingCustomProxy) {
+    console.warn('[ProxyError] Skipping built-in recovery for custom proxy mode')
     return
   }
 
@@ -271,6 +277,12 @@ export const handleProxyError = async ({ error }) => {
     } = await browser.storage.local.get({
       fallbackProxyInUse: false,
       currentProxyServer: null,
+    })
+
+    console.warn('[ProxyError] Known proxy error details', {
+      error,
+      currentProxyServer,
+      fallbackProxyInUse,
     })
 
     if (fallbackProxyInUse) {

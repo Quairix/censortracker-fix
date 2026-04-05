@@ -435,6 +435,18 @@
   "proxyOptionsStatusTitle": {
     "message": "Не вдалося встановити з'єднання з проксі-сервером"
   },
+  "proxyFetchErrorDesc": {
+    "message": "Не вдалося отримати проксі з сервера Censor Tracker. Спробуйте пізніше або переключіться на свій проксі."
+  },
+  "proxyFetchErrorTitle": {
+    "message": "Не вдалося оновити конфігурацію проксі"
+  },
+  "proxyFetchFallbackDesc": {
+    "message": "Censor Tracker отримав резервний проксі від сервера. Зазвичай це тимчасовий захід."
+  },
+  "proxyFetchFallbackTitle": {
+    "message": "Використовується резервний проксі"
+  },
   "proxyPort": {
     "message": "Порт"
   },

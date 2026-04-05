@@ -19,6 +19,15 @@ const getConfigAPIEndpoints = () => {
 
 const FALLBACK_COUNTRY_CODE = 'RU'
 
+const setProxyFetchStatus = async (status = {}) => {
+  await browser.storage.local.set({
+    proxyFetchStatus: {
+      updatedAt: Date.now(),
+      ...status,
+    },
+  })
+}
+
 /**
  * Fetches the country code from the given GeoIP API Endpoint.
  * @param geoIPServiceURL {string} API endpoint for fetching country code.
@@ -101,7 +110,11 @@ const fetchConfig = async () => {
  */
 const fetchProxy = async ({ proxyUrl } = {}) => {
   if (!proxyUrl) {
-    console.warn('[Proxy] «proxyUrl» is not present in config.')
+    console.warn('[Proxy] proxyUrl is not present in config.')
+    await setProxyFetchStatus({
+      state: 'error',
+      errorMessage: 'proxyUrl is not present in config.',
+    })
     return
   }
 
@@ -142,7 +155,12 @@ const fetchProxy = async ({ proxyUrl } = {}) => {
     console.log(`Proxy server fetched: ${proxyServerURI}!`)
 
     if (fallbackProxyInUse) {
-      console.warn(`Using fallback «${proxyServerURI}» for the reason: ${fallbackReason}`)
+      console.warn(`Using fallback "${proxyServerURI}" for the reason: ${fallbackReason}`)
+      await setProxyFetchStatus({
+        state: 'fallback',
+        proxyServerURI,
+        fallbackReason,
+      })
     } else {
       await browser.storage.local.set({ proxyIsAlive: true })
       await browser.storage.local.remove([
@@ -150,6 +168,10 @@ const fetchProxy = async ({ proxyUrl } = {}) => {
         'fallbackProxyInUse',
         'fallbackProxyError',
       ])
+      await setProxyFetchStatus({
+        state: 'ok',
+        proxyServerURI,
+      })
     }
 
     await browser.storage.local.set({
@@ -161,6 +183,10 @@ const fetchProxy = async ({ proxyUrl } = {}) => {
       proxyLastFetchTs: Date.now(),
     })
   } catch (error) {
+    await setProxyFetchStatus({
+      state: 'error',
+      errorMessage: error?.message || String(error),
+    })
     console.error(
       `Error on fetching proxy server: ${error}`,
     )

@@ -435,6 +435,18 @@
   "proxyOptionsStatusTitle": {
     "message": "Failed to establish a connection to the proxy server"
   },
+  "proxyFetchErrorDesc": {
+    "message": "Censor Tracker could not get a proxy from the server. Try again later or switch to your own proxy."
+  },
+  "proxyFetchErrorTitle": {
+    "message": "Failed to update the proxy configuration"
+  },
+  "proxyFetchFallbackDesc": {
+    "message": "Censor Tracker received a reserve proxy from the server. This is usually temporary."
+  },
+  "proxyFetchFallbackTitle": {
+    "message": "Reserve proxy is in use"
+  },
   "proxyPort": {
     "message": "Port"
   },
