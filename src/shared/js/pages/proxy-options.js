@@ -7,6 +7,9 @@ import * as server from 'Background/server'
   const proxyingEnabled = await ProxyManager.isEnabled()
   const loading = document.getElementById('loading')
   const proxyIsDown = document.getElementById('proxyIsDown')
+  const proxyStatusTitle = document.getElementById('proxyStatusTitle')
+  const proxyStatusDesc = document.getElementById('proxyStatusDesc')
+  const proxyStatusDetails = document.getElementById('proxyStatusDetails')
   const rksVPNBanner = document.getElementById('rksVPNBanner')
   const proxyServerInput = document.getElementById('proxyServerInput')
   const saveCustomProxyButton = document.getElementById('saveCustomProxyButton')
@@ -18,7 +21,7 @@ import * as server from 'Background/server'
   const useLocalProxyRadioButton = document.getElementById('useLocalProxy')
   const proxyCustomOptionsRadioGroup = document.getElementById('proxyCustomOptionsRadioGroup')
   const selectProxyProtocol = document.querySelector('.select')
-  const currentProxyProtocol = document.querySelector('#select-toggle')
+  const proxySelectToggle = document.querySelector('#select-toggle')
   const proxyProtocols = document.querySelectorAll('.select-option')
   const localProxyOptions = document.getElementById('localProxyOptions')
   const addLocalProxyButton = document.getElementById('addLocalProxyButton')
@@ -32,12 +35,90 @@ import * as server from 'Background/server'
   const localProxyTextarea = document.getElementById('localProxyTextarea')
   const downloadLocalProxyButton = document.getElementById('downloadLocalProxyButton')
 
+  const setProxyStatusMessage = ({ titleKey, descKey, details = '' } = {}) => {
+    proxyStatusTitle.textContent = browser.i18n.getMessage(titleKey)
+    proxyStatusDesc.textContent = browser.i18n.getMessage(descKey)
+
+    if (details) {
+      proxyStatusDetails.textContent = details
+      proxyStatusDetails.classList.remove('hidden')
+    } else {
+      proxyStatusDetails.textContent = ''
+      proxyStatusDetails.classList.add('hidden')
+    }
+
+    proxyIsDown.hidden = false
+  }
+
+  const renderProxyStatus = async () => {
+    const {
+      useProxy = true,
+      useOwnProxy = false,
+      useLocalProxy = false,
+      proxyFetchStatus = {},
+    } = await browser.storage.local.get({
+      useProxy: true,
+      useOwnProxy: false,
+      useLocalProxy: false,
+      proxyFetchStatus: {},
+    })
+
+    if (!useProxy || useOwnProxy || useLocalProxy) {
+      proxyIsDown.hidden = true
+      return
+    }
+
+    if (proxyFetchStatus.state === 'fallback') {
+      setProxyStatusMessage({
+        titleKey: 'proxyFetchFallbackTitle',
+        descKey: 'proxyFetchFallbackDesc',
+        details: proxyFetchStatus.fallbackReason,
+      })
+      return
+    }
+
+    if (proxyFetchStatus.state === 'error') {
+      setProxyStatusMessage({
+        titleKey: 'proxyFetchErrorTitle',
+        descKey: 'proxyFetchErrorDesc',
+        details: proxyFetchStatus.errorMessage,
+      })
+      return
+    }
+
+    const alive = await ProxyManager.alive()
+
+    if (!alive) {
+      setProxyStatusMessage({
+        titleKey: 'proxyOptionsStatusTitle',
+        descKey: 'proxyOptionsStatusDesc',
+      })
+      return
+    }
+
+    proxyIsDown.hidden = true
+  }
+
   ProxyManager.isEnabled().then((isEnabled) => {
     useProxyCheckbox.checked = isEnabled
   })
 
-  ProxyManager.alive().then((alive) => {
-    proxyIsDown.hidden = alive
+  await renderProxyStatus()
+
+  browser.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName !== 'local') {
+      return
+    }
+
+    if (
+      changes.proxyFetchStatus ||
+      changes.proxyIsAlive ||
+      changes.useProxy ||
+      changes.useOwnProxy ||
+      changes.useLocalProxy
+    ) {
+      renderProxyStatus()
+    }
   })
 
   proxyCustomOptions.hidden = !proxyingEnabled
@@ -244,7 +325,7 @@ import * as server from 'Background/server'
   ])
 
   if (customProxyProtocol) {
-    currentProxyProtocol.textContent = customProxyProtocol
+    proxySelectToggle.textContent = customProxyProtocol
   }
 
   if (useLocalProxy) {
@@ -264,11 +345,19 @@ import * as server from 'Background/server'
     proxyServerInput.value = customProxyServerURI
   }
 
+  const redactProxyServerURI = (uri = '') =>
+    uri.replace(/^([^@]+)@/, '<redacted>@')
+
   saveCustomProxyButton.addEventListener('click', async (event) => {
     const customProxyServer = proxyServerInput.value
-    const proxyProtocol = currentProxyProtocol.textContent.trim()
+    const proxyProtocol = getSelectedProxyType()
 
     if (customProxyServer) {
+      console.info('[ProxyOptions] Saving custom proxy', {
+        proxyProtocol,
+        customProxyServerURI: redactProxyServerURI(customProxyServer),
+      })
+
       await browser.storage.local.set({
         useOwnProxy: true,
         customProxyProtocol: proxyProtocol,
@@ -308,6 +397,8 @@ import * as server from 'Background/server'
       await showLocalProxySettings()
       await renderLocalProxyConfigs()
     }
+
+    await renderProxyStatus()
   })
 
   ProxyManager.controlledByThisExtension()
@@ -336,6 +427,7 @@ import * as server from 'Background/server'
       proxyCustomOptions.hidden = false
       useProxyCheckbox.checked = true
       await ProxyManager.enableProxy()
+      await renderProxyStatus()
     } else {
       proxyCustomOptions.hidden = true
       useProxyCheckbox.checked = false
@@ -360,8 +452,25 @@ import * as server from 'Background/server'
     option.addEventListener('click', async (event) => {
       selectProxyProtocol.classList.remove('show-protocols')
 
-      currentProxyProtocol.value = event.target.dataset.value
-      currentProxyProtocol.textContent = event.target.dataset.value
+      proxySelectToggle.value = event.target.dataset.value
+      proxySelectToggle.textContent = event.target.dataset.value
+      console.info('[ProxyOptions] Selected proxy protocol', {
+        proxyProtocol: event.target.dataset.value,
+      })
     })
+  }
+
+  const getSelectedProxyType = () => {
+    const currentButtonText = proxySelectToggle.textContent.trim()
+
+    const proxyTypeMap = {
+      HTTP: 'PROXY',
+      HTTPS: 'HTTPS',
+      SOCKS4: 'SOCKS4',
+      SOCKS5: 'SOCKS5',
+      PROXY: 'PROXY',
+    }
+
+    return proxyTypeMap[currentButtonText] || currentButtonText
   }
 })()

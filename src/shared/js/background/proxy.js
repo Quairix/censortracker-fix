@@ -3,6 +3,15 @@ import { getPacScript } from 'Background/pac'
 import browser from './browser-api'
 import registry from './registry'
 
+const redactProxyServerURI = (uri = '') =>
+  uri.replace(/^([^@]+)@/, '<redacted>@')
+
+const previewPacScript = (pacData = '') =>
+  pacData
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 240)
+
 class ProxyManager {
   async getProxyingRules () {
     const {
@@ -17,10 +26,18 @@ class ProxyManager {
       'localProxyURI',
     ])
 
+    console.info('[ProxyManager] Loaded proxy settings snapshot', {
+      hasProxyServerURI: Boolean(proxyServerURI),
+      customProxyProtocol,
+      customProxyServerURI: redactProxyServerURI(customProxyServerURI),
+      localProxyURI: redactProxyServerURI(localProxyURI),
+    })
+
     // When Censor Tracker Proxy Server is used
     if (localProxyURI) {
       console.log(`Using local proxy server: ${localProxyURI}`)
       return {
+        proxySource: 'local',
         proxyServerProtocol: 'SOCKS5',
         proxyServerURI: localProxyURI,
       }
@@ -31,11 +48,13 @@ class ProxyManager {
       customProxyProtocol
     ) {
       return {
+        proxySource: 'custom',
         proxyServerProtocol: customProxyProtocol,
         proxyServerURI: customProxyServerURI,
       }
     }
     return {
+      proxySource: 'default',
       proxyServerProtocol: 'HTTPS',
       proxyServerURI,
     }
@@ -78,6 +97,7 @@ class ProxyManager {
     }
 
     const {
+      proxySource,
       proxyServerURI,
       proxyServerProtocol,
     } = await this.getProxyingRules()
@@ -86,6 +106,16 @@ class ProxyManager {
       domains,
       proxyServerURI,
       proxyServerProtocol,
+    })
+
+    console.info('[ProxyManager] Preparing proxy config', {
+      browser: browser.isFirefox ? 'firefox' : 'chrome',
+      proxySource,
+      proxyServerProtocol,
+      proxyServerURI: redactProxyServerURI(proxyServerURI),
+      domainsCount: domains.length,
+      domainsPreview: domains.slice(0, 10),
+      pacPreview: previewPacScript(pacData),
     })
 
     if (browser.isFirefox) {
@@ -109,13 +139,33 @@ class ProxyManager {
     }
 
     try {
+      const currentSettings = await browser.proxy.settings.get({})
+
+      console.info('[ProxyManager] Proxy settings before set', {
+        levelOfControl: currentSettings.levelOfControl,
+        mode: currentSettings.value?.mode,
+      })
+
       await browser.proxy.settings.set(config)
+      const updatedSettings = await browser.proxy.settings.get({})
+
+      console.info('[ProxyManager] Proxy settings after set', {
+        levelOfControl: updatedSettings.levelOfControl,
+        mode: updatedSettings.value?.mode,
+      })
       await this.enableProxy()
       await this.grantIncognitoAccess()
       console.warn('PAC has been set successfully!')
       return true
     } catch (error) {
-      console.error(`PAC could not be set: ${error}`)
+      console.error('[ProxyManager] PAC could not be set', {
+        error: error?.message || String(error),
+        stack: error?.stack,
+        configMode: config.value?.mode,
+        proxySource,
+        proxyServerProtocol,
+        proxyServerURI: redactProxyServerURI(proxyServerURI),
+      })
       await this.disableProxy()
       await this.requestIncognitoAccess()
       return false
